@@ -198,6 +198,13 @@ HdSceneDelegate::GetReprName(SdfPath const &id)
     return TfToken();
 }
 
+/*virtual*/
+VtArray<TfToken>
+HdSceneDelegate::GetCategories(SdfPath const& id)
+{
+    return VtArray<TfToken>();
+}
+
 // -----------------------------------------------------------------------//
 /// \name Instancer prototypes
 // -----------------------------------------------------------------------//
@@ -301,6 +308,13 @@ HdSceneDelegate::GetMaterialPrimvars(SdfPath const &materialId)
     return TfTokenVector();
 }
 
+/* virtual */
+VtDictionary
+HdSceneDelegate::GetMaterialMetadata(SdfPath const &materialId)
+{
+    return VtDictionary();
+}
+
 
 // -----------------------------------------------------------------------//
 /// \name Texture Aspects
@@ -318,6 +332,17 @@ HdTextureResourceSharedPtr
 HdSceneDelegate::GetTextureResource(SdfPath const& textureId)
 {
     return HdTextureResourceSharedPtr();
+}
+
+// -----------------------------------------------------------------------//
+/// \name Renderbuffer Aspects
+// -----------------------------------------------------------------------//
+
+/*virtual*/
+HdRenderBufferDescriptor
+HdSceneDelegate::GetRenderBufferDescriptor(SdfPath const& id)
+{
+    return HdRenderBufferDescriptor();
 }
 
 // -----------------------------------------------------------------------//

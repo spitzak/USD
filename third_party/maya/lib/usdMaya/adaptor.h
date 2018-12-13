@@ -24,13 +24,15 @@
 #ifndef PXRUSDMAYA_ADAPTOR_H
 #define PXRUSDMAYA_ADAPTOR_H
 
-/// \file adaptor.h
+/// \file usdMaya/adaptor.h
+
+#include "usdMaya/api.h"
 
 #include "pxr/pxr.h"
-#include "usdMaya/api.h"
 
 #include "pxr/base/tf/registryManager.h"
 #include "pxr/base/vt/value.h"
+
 #include "pxr/usd/sdf/attributeSpec.h"
 #include "pxr/usd/sdf/primSpec.h"
 #include "pxr/usd/usd/common.h"
@@ -42,8 +44,8 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-/// \class PxrUsdMayaAdaptor
-/// The PxrUsdMayaAdaptor transparently adapts the interface for a Maya object
+/// \class UsdMayaAdaptor
+/// The UsdMayaAdaptor transparently adapts the interface for a Maya object
 /// to a UsdPrim-like interface, allowing you to get and set Maya attributes as
 /// VtValues. Via this mechanism, the USD importer can automatically adapt USD
 /// data into Maya attributes, and the USD exporter can adapt Maya data back
@@ -52,7 +54,7 @@ PXR_NAMESPACE_OPEN_SCOPE
 /// adaptor to set UsdGeomModelAPI's model draw mode attributes from within
 /// Maya, and the exported USD prims will conform to the API schema.
 ///
-/// PxrUsdMayaAdaptor determines the conversion between Maya and USD types by
+/// UsdMayaAdaptor determines the conversion between Maya and USD types by
 /// consulting registered metadata fields and schemas. In order to use it with
 /// any custom metadata or schemas, you must ensure that they are registered
 /// via a plugInfo.json file and loaded by the USD system. If you need to
@@ -66,15 +68,17 @@ PXR_NAMESPACE_OPEN_SCOPE
 /// the _usdImport_ command.
 ///
 /// If you are using the C++ API, then some functions will take an MDGModifier,
-/// allowing you to undo the function's operations at a later time. You can use
-/// this to implement undo/redo in commands. If you're using the Python API,
-/// the overloads taking MDGModifier are not currently wrapped, so undo is
-/// unsupported.
+/// allowing you to undo the function's operations at a later time.
+/// If you're using the Python API, there is no direct access to the overloads
+/// taking an MDGModifier, but you can get undo functionality by registering and
+/// loading the \c usdUndoHelperCmd command in Maya. If \c usdUndoHelperCmd is
+/// available, Python adaptor operations will automatically write to the undo
+/// stack.
 ///
 /// \section UsdMaya_Adaptor_examples Examples
 /// If you are familiar with the USD API, then this will be familiar, although
 /// not entirely the same. Here are some examples of how you might do things in
-/// the USD API versus using the PxrUsdMayaAdaptor.
+/// the USD API versus using the UsdMayaAdaptor.
 ///
 /// \subsection UsdMaya_Adaptor_metadata Metadata
 /// In USD:
@@ -129,7 +133,7 @@ PXR_NAMESPACE_OPEN_SCOPE
 /// schema.CreateAttribute('fakeAttributeName')
 /// # Error: ErrorException
 /// \endcode
-class PxrUsdMayaAdaptor {
+class UsdMayaAdaptor {
 public:
     /// The AttributeAdaptor stores a mapping between a USD schema attribute and
     /// a Maya plug, enabling conversions between the two.
@@ -144,7 +148,7 @@ public:
     /// AttributeAdaptor is designed to be a wrapper around some underlying Maya
     /// attribute, and Maya attributes always have values, it's not possible to
     /// Clear() the authored value. You can, however, completely remove the
-    /// attribute by using PxrUsdMayaAdaptor::SchemaAdaptor::RemoveAttribute().
+    /// attribute by using UsdMayaAdaptor::SchemaAdaptor::RemoveAttribute().
     class AttributeAdaptor {
         MPlug _plug;
         MObjectHandle _node;
@@ -163,7 +167,7 @@ public:
 
         /// Gets the adaptor for the node that owns this attribute.
         PXRUSDMAYA_API
-        PxrUsdMayaAdaptor GetNodeAdaptor() const;
+        UsdMayaAdaptor GetNodeAdaptor() const;
 
         /// Gets the name of the attribute in the bound USD schema.
         /// Returns the empty token if this attribute adaptor is invalid.
@@ -239,7 +243,7 @@ public:
 
         /// Gets the root adaptor for the underlying Maya node.
         PXRUSDMAYA_API
-        PxrUsdMayaAdaptor GetNodeAdaptor() const;
+        UsdMayaAdaptor GetNodeAdaptor() const;
 
         /// Gets the name of the bound schema.
         /// Returns the empty token if this schema adaptor is invalid.
@@ -320,11 +324,11 @@ public:
         /// definition. The name may come from the registered aliases if one
         /// exists and is already present on the node.
         std::string _GetMayaAttrNameOrAlias(
-                const SdfAttributeSpecHandle attrSpec) const;
+                const SdfAttributeSpecHandle& attrSpec) const;
     };
 
     PXRUSDMAYA_API
-    PxrUsdMayaAdaptor(const MObject& obj);
+    UsdMayaAdaptor(const MObject& obj);
 
     PXRUSDMAYA_API
     explicit operator bool() const;
@@ -357,7 +361,7 @@ public:
     /// invalid or if the schema type does not correspond to any USD schema.
     ///
     /// This function requires an exact match for any typed schema due to
-    /// current API limitations. For example, if the current PxrUsdMayaAdaptor
+    /// current API limitations. For example, if the current UsdMayaAdaptor
     /// wraps a transform node (<tt>GetUsdTypeName() = "Xform"</tt>), you can
     /// use <tt>GetSchema(TfType::Find<UsdGeomXform>())</tt> but not
     /// <tt>GetSchema(TfType::Find<UsdGeomXformable>())</tt>, even though the
@@ -372,7 +376,7 @@ public:
     /// invalid or if the schema type does not correspond to any USD schema.
     ///
     /// This function requires an exact match for any typed schema name due to
-    /// current API limitations. For example, if the current PxrUsdMayaAdaptor
+    /// current API limitations. For example, if the current UsdMayaAdaptor
     /// wraps a transform node (<tt>GetUsdTypeName() = "Xform"</tt>), you can
     /// use <tt>GetSchemaByName("Xform")</tt> but not
     /// <tt>GetSchemaByName("Xformable")</tt>, even though the
@@ -394,7 +398,7 @@ public:
     /// concrete type, at the expense of returning a schema adaptor that is
     /// more powerful than (i.e., a superset of) the one that you requested.
     ///
-    /// For example, suppose that you have a PxrUsdMayaAdaptor that wraps a
+    /// For example, suppose that you have a UsdMayaAdaptor that wraps a
     /// Maya transform, and <tt>GetUsdTypeName() = "Xform"</tt>.
     /// <tt>GetSchemaOrInheritedSchema(TfType::Find<UsdGeomImageable>())</tt>,
     /// <tt>GetSchemaOrInheritedSchema(TfType::Find<UsdGeomXformable>())</tt>,
@@ -413,16 +417,30 @@ public:
     /// metadata, and the USD exporter will recognize the API schema when
     /// exporting this node to a USD prim.
     /// Raises a coding error if the type does not correspond to any known
-    /// USD schema, or if it is not an API schema, or if the adaptor is invalid.
+    /// USD schema, or if it is not an API schema, or if it is a non-applied API
+    /// schema, or if the adaptor is invalid.
     PXRUSDMAYA_API
     SchemaAdaptor ApplySchema(const TfType& ty);
+
+    /// Applies the given API schema type on this Maya object via the adaptor
+    /// mechanism. The schema's name is added to the adaptor's apiSchemas
+    /// metadata, and the USD exporter will recognize the API schema when
+    /// exporting this node to a USD prim.
+    /// Raises a coding error if the type does not correspond to any known
+    /// USD schema, or if it is not an API schema, or if it is a non-applied API
+    /// schema, or if the adaptor is invalid.
+    /// \note This overload will call doIt() on the MDGModifier; thus any
+    /// actions will have been committed when the function returns.
+    PXRUSDMAYA_API
+    SchemaAdaptor ApplySchema(const TfType& ty, MDGModifier& modifier);
 
     /// Applies the named API schema on this Maya object via the adaptor
     /// mechanism. The schema's name is added to the adaptor's apiSchemas
     /// metadata, and the USD exporter will recognize the API schema when
     /// exporting this node to a USD prim.
     /// Raises a coding error if there is no known USD schema with this name, or
-    /// if it is not an API schema, or if the adaptor is invalid.
+    /// if it is not an API schema, or if it is a non-applied API schema, or if
+    /// the adaptor is invalid.
     PXRUSDMAYA_API
     SchemaAdaptor ApplySchemaByName(const TfToken& schemaName);
 
@@ -443,6 +461,13 @@ public:
     /// Raises a coding error if the adaptor is invalid.
     PXRUSDMAYA_API
     void UnapplySchema(const TfType& ty);
+
+    /// Removes the given API schema from the adaptor's apiSchemas metadata.
+    /// \note This overload will call doIt() on the MDGModifier; thus any
+    /// actions will have been committed when the function returns.
+    /// Raises a coding error if the adaptor is invalid.
+    PXRUSDMAYA_API
+    void UnapplySchema(const TfType& ty, MDGModifier& modifier);
 
     /// Removes the named API schema from the adaptor's apiSchemas metadata.
     /// Raises a coding error if the adaptor is invalid.
@@ -516,21 +541,13 @@ public:
     PXRUSDMAYA_API
     static TfToken::Set GetRegisteredTypedSchemas();
 
-    /// Registers the given Maya Fn type with a USD typed schema.
-    /// Each Maya type is associated with only one TfType; re-registering
-    /// the same Maya type again will overwrite the previous registration.
-    /// However, multiple Maya types may map to the same TfType.
-    PXRUSDMAYA_API
-    static void RegisterTypedSchemaConversion(
-            const MFn::Type mayaType, const TfType& usdType);
-
     /// Registers the given Maya plugin type with a USD typed schema.
     /// Each Maya type is associated with only one TfType; re-registering
     /// the same Maya type again will overwrite the previous registration.
     /// However, multiple Maya types may map to the same TfType.
     PXRUSDMAYA_API
     static void RegisterTypedSchemaConversion(
-            const std::string& pluginType, const TfType& usdType);
+            const std::string& nodeTypeName, const TfType& usdType);
 
     /// For backwards compatibility only: when upgrading any pre-existing code
     /// to use the adaptor mechanism, you can instruct the adaptor to recognize
@@ -545,46 +562,64 @@ public:
     /// When the system needs to create a new Maya attribute (because it
     /// cannot find any attributes with the default name or the alias names),
     /// it always uses the generated name.
-    /// \sa PxrUsdMayaAdaptor::SchemaAdaptor::CreateAttribute()
+    /// \sa UsdMayaAdaptor::SchemaAdaptor::CreateAttribute()
+    PXRUSDMAYA_API
     static void RegisterAttributeAlias(
             const TfToken& attributeName, const std::string& alias);
+
+    /// Gets the name of all possible Maya attribute names for the given USD
+    /// schema \p attributeName, in the order in which the aliases were
+    /// registered. The default generated name is always the zeroth item in the
+    /// returned vector.
+    PXRUSDMAYA_API
+    static std::vector<std::string> GetAttributeAliases(
+            const TfToken& attributeName);
 
 private:
     MObjectHandle _handle;
 
-    /// Mapping of Maya (Maya Fn type, type name) to TfType's for typed schemas.
+    /// Mapping of Maya type name to TfType's for typed schemas.
     /// API (untyped) schemas should never be included in this mapping.
-    /// The type name string is only included for nodes of type
-    /// MFn::kPluginDependNode. It is empty for all other node types.
-    static std::map<std::pair<MFn::Type, std::string>, TfType> _schemaLookup;
+    static std::map<std::string, TfType> _schemaLookup;
 
     /// Attribute aliases for backwards compatibility.
     static std::map<TfToken, std::vector<std::string>> _attributeAliases;
 };
 
-/// Registers the given Maya \p fnOrPluginType with the given USD \p schemaType
+/// Registers the given \p mayaTypeName with the given USD \p schemaType
 /// so that those Maya nodes can be used with the given typed schema in the
-/// adaptor system. \p fnOrPluginType can be a Maya MFn::Type enum or a plugin
-/// type string. Each \p fnOrPluginType is mapped to a single \p schemaType;
-/// the last registration wins.
+/// adaptor system. \p mayaTypeName is a Maya node name. Each \p fnOrPluginType
+/// is mapped to a single \p schemaType; the last registration wins.
 ///
 /// The convention in the UsdMaya library is to place the registration macro
-/// in the prim writer if both a prim writer and reader exist for the same
-/// node type.
-/// \sa PxrUsdMayaAdaptor::RegisterTypedSchemaConversion()
-#define PXRUSDMAYA_REGISTER_ADAPTOR_SCHEMA(fnOrPluginType, schemaType)\
-TF_REGISTRY_FUNCTION(PxrUsdMayaAdaptor)\
+/// in the prim writer that exports \p mayaTypeName nodes as \p schemaType
+/// prims. This will ensure that the registrations are properly invoked by the
+/// UsdMaya adaptor system.
+///
+/// Example usage:
+/// \code
+/// PXRUSDMAYA_REGISTER_ADAPTOR_SCHEMA(myTypeName, MySchemaType);
+/// \endcode
+///
+/// \sa UsdMayaAdaptor::RegisterTypedSchemaConversion()
+#define PXRUSDMAYA_REGISTER_ADAPTOR_SCHEMA(mayaTypeName, schemaType)\
+TF_REGISTRY_FUNCTION(UsdMayaAdaptor)\
 {\
-    PxrUsdMayaAdaptor::RegisterTypedSchemaConversion(\
-            fnOrPluginType, TfType::Find<schemaType>());\
+    UsdMayaAdaptor::RegisterTypedSchemaConversion(\
+            #mayaTypeName, TfType::Find<schemaType>());\
 }
 
 /// Registers an \p alias string for the given \p attrName token or string.
-/// \sa PxrUsdMayaAdaptor::RegisterAttributeAlias()
+///
+/// You should invoke this macro in the same place that you invoke any
+/// PXRUSDMAYA_REGISTER_ADAPTOR_SCHEMA macros for your type. This will ensure
+/// that all the aliases are registered at the correct time.
+///
+/// \sa UsdMayaAdaptor::RegisterAttributeAlias()
 #define PXRUSDMAYA_REGISTER_ADAPTOR_ATTRIBUTE_ALIAS(attrName, alias)\
-TF_REGISTRY_FUNCTION(PxrUsdMayaAdaptor)\
+TF_REGISTRY_FUNCTION(UsdMayaAdaptor)\
 {\
-    PxrUsdMayaAdaptor::RegisterAttributeAlias(TfToken(attrName), alias);\
+    UsdMayaAdaptor::RegisterAttributeAlias(TfToken(attrName), alias);\
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

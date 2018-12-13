@@ -48,7 +48,6 @@ if(PXR_ENABLE_PYTHON_SUPPORT)
             filesystem
             program_options
             python
-            regex
             system
         REQUIRED
     )
@@ -63,7 +62,6 @@ else()
         COMPONENTS
             filesystem
             program_options
-            regex
             system
         REQUIRED
     )
@@ -105,11 +103,17 @@ if (PXR_BUILD_IMAGING)
     # --OpenEXR
     find_package(OpenEXR REQUIRED)
     # --OpenImageIO
-    find_package(OpenImageIO REQUIRED)
+    if (PXR_BUILD_OPENIMAGEIO_PLUGIN)
+        find_package(OpenImageIO REQUIRED)
+        add_definitions(-DPXR_OIIO_PLUGIN_ENABLED)
+    endif()
     # --OpenGL
-    find_package(OpenGL REQUIRED)
-    find_package(GLEW REQUIRED)
+    if (PXR_ENABLE_GL_SUPPORT)
+        find_package(OpenGL REQUIRED)
+        find_package(GLEW REQUIRED)
+    endif()
     # --Opensubdiv
+    set(OPENSUBDIV_USE_GPU ${PXR_ENABLE_GL_SUPPORT})
     find_package(OpenSubdiv 3 REQUIRED)
     # --Ptex
     if (PXR_ENABLE_PTEX_SUPPORT)
@@ -162,6 +166,14 @@ if (PXR_BUILD_ALEMBIC_PLUGIN)
             REQUIRED
         )
     endif()
+endif()
+
+if (PXR_BUILD_MATERIALX_PLUGIN)
+    find_package(MaterialX REQUIRED)
+endif()
+
+if(PXR_ENABLE_OSL_SUPPORT)
+    find_package(OSL REQUIRED)
 endif()
 
 # ----------------------------------------------

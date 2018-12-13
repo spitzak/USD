@@ -104,22 +104,6 @@ void wrapUsdSkelBindingAPI()
         .def("Apply", &This::Apply, (arg("prim")))
         .staticmethod("Apply")
 
-        .def("IsConcrete",
-            static_cast<bool (*)(void)>( [](){ return This::IsConcrete; }))
-        .staticmethod("IsConcrete")
-
-        .def("IsTyped",
-            static_cast<bool (*)(void)>( [](){ return This::IsTyped; } ))
-        .staticmethod("IsTyped")
-
-        .def("IsApplied", 
-            static_cast<bool (*)(void)>( [](){ return This::IsApplied; } ))
-        .staticmethod("IsApplied")
-
-        .def("IsMultipleApply", 
-            static_cast<bool (*)(void)>( [](){ return This::IsMultipleApply; } ))
-        .staticmethod("IsMultipleApply")
-
         .def("GetSchemaAttributeNames",
              &This::GetSchemaAttributeNames,
              arg("includeInherited")=true,
@@ -210,6 +194,22 @@ void wrapUsdSkelBindingAPI()
 namespace {
 
 
+object
+_GetSkeleton(const UsdSkelBindingAPI& binding)
+{
+    UsdSkelSkeleton skel;
+    return binding.GetSkeleton(&skel) ? object(skel) : object();
+}
+
+
+object
+_GetAnimationSource(const UsdSkelBindingAPI& binding)
+{
+    UsdPrim prim;
+    return binding.GetAnimationSource(&prim) ? object(prim) : object();
+}
+
+
 WRAP_CUSTOM {
     using This = UsdSkelBindingAPI;
 
@@ -226,6 +226,14 @@ WRAP_CUSTOM {
 
         .def("SetRigidJointInfluence", &This::SetRigidJointInfluence,
              (arg("jointIndex"), arg("weight")=1.0f))
+
+        .def("GetSkeleton", &_GetSkeleton)
+
+        .def("GetAnimationSource", &_GetAnimationSource)
+        
+        .def("GetInheritedSkeleton", &This::GetInheritedSkeleton)
+        
+        .def("GetInheritedAnimationSource", &This::GetInheritedAnimationSource)
         ;
 }
 

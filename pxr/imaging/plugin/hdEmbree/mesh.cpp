@@ -29,6 +29,7 @@
 #include "pxr/imaging/hdEmbree/renderParam.h"
 #include "pxr/imaging/hdEmbree/renderPass.h"
 #include "pxr/imaging/hd/meshUtil.h"
+#include "pxr/imaging/hd/smoothNormals.h"
 #include "pxr/imaging/pxOsd/tokens.h"
 #include "pxr/base/gf/matrix4f.h"
 #include "pxr/base/gf/matrix4d.h"
@@ -82,7 +83,7 @@ HdEmbreeMesh::Finalize(HdRenderParam *renderParam)
 }
 
 HdDirtyBits
-HdEmbreeMesh::_GetInitialDirtyBits() const
+HdEmbreeMesh::GetInitialDirtyBitsMask() const
 {
     // The initial dirty bits control what data is available on the first
     // run through _PopulateRtMesh(), so it should list every data item
@@ -532,7 +533,7 @@ HdEmbreeMesh::_PopulateRtMesh(HdSceneDelegate* sceneDelegate,
     // The repr defines whether we should compute smooth normals for this mesh:
     // per-vertex normals taken as an average of adjacent faces, and
     // interpolated smoothly across faces.
-    _smoothNormals = desc.smoothNormals;
+    _smoothNormals = !desc.flatShadingEnabled;
 
     // If the subdivision scheme is "none" or "bilinear", force us not to use
     // smooth normals.
@@ -664,8 +665,8 @@ HdEmbreeMesh::_PopulateRtMesh(HdSceneDelegate* sceneDelegate,
         _normalsValid = false;
     }
     if (_smoothNormals && !_normalsValid) {
-        _computedNormals = _adjacency.ComputeSmoothNormals(_points.size(),
-            _points.cdata());
+        _computedNormals = Hd_SmoothNormals::ComputeSmoothNormals(
+            &_adjacency, _points.size(), _points.cdata());
         _normalsValid = true;
 
         // Create a sampler for the "normals" primvar. If there are authored

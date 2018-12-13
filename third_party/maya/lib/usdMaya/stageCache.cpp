@@ -21,8 +21,6 @@
 // KIND, either express or implied. See the Apache License for the specific
 // language governing permissions and limitations under the Apache License.
 //
-#include "pxr/pxr.h"
-
 #include "usdMaya/stageCache.h"
 
 #include "pxr/usd/sdf/attributeSpec.h"
@@ -33,7 +31,6 @@
 #include "pxr/usd/usdGeom/tokens.h"
 
 #include <maya/MFileIO.h>
-#include <maya/MGlobal.h>
 #include <maya/MSceneMessage.h>
 
 #include <map>
@@ -51,13 +48,13 @@ std::mutex _sharedSessionLayersMutex;
 
 static
 void
-_OnMayaNewOrOpenSceneCallback(void* clientData)
+_OnMayaNewOrOpenSceneCallback(void*  /*clientData*/)
 {
     if (MFileIO::isImportingFile() || MFileIO::isReferencingFile()) {
         return;
     }
 
-    MGlobal::displayInfo("Clearing USD Stage Cache");
+    TF_STATUS("Clearing USD Stage Cache");
     UsdMayaStageCache::Clear();
 
     std::lock_guard<std::mutex> lock(_sharedSessionLayersMutex);
@@ -126,7 +123,7 @@ UsdMayaStageCache::EraseAllStagesWithRootLayerPath(const std::string& layerPath)
 SdfLayerRefPtr
 UsdMayaStageCache::GetSharedSessionLayer(
     const SdfPath& rootPath,
-    const std::map<std::string, std::string> variantSelections,
+    const std::map<std::string, std::string>& variantSelections,
     const TfToken& drawMode)
 {
     // Example key: "/Root/Path:modelingVariant=round|shadingVariant=red|:cards"

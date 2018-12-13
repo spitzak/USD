@@ -33,7 +33,8 @@
 #include "pxr/usd/usd/stage.h"
 #include "pxr/usd/usdSkel/tokens.h"
 
-#include "pxr/usd/usdGeom/primvar.h" 
+#include "pxr/usd/usdGeom/primvar.h"
+#include "pxr/usd/usdSkel/skeleton.h" 
 
 #include "pxr/base/vt/value.h"
 
@@ -65,27 +66,10 @@ class SdfAssetPath;
 class UsdSkelBindingAPI : public UsdAPISchemaBase
 {
 public:
-    /// Compile-time constant indicating whether or not this class corresponds
-    /// to a concrete instantiable prim type in scene description.  If this is
-    /// true, GetStaticPrimDefinition() will return a valid prim definition with
-    /// a non-empty typeName.
-    static const bool IsConcrete = false;
-
-    /// Compile-time constant indicating whether or not this class inherits from
-    /// UsdTyped. Types which inherit from UsdTyped can impart a typename on a
-    /// UsdPrim.
-    static const bool IsTyped = false;
-
-    /// Compile-time constant indicating whether or not this class represents an 
-    /// applied API schema, i.e. an API schema that has to be applied to a prim
-    /// with a call to auto-generated Apply() method before any schema 
-    /// properties are authored.
-    static const bool IsApplied = true;
-    
-    /// Compile-time constant indicating whether or not this class represents a 
-    /// multiple-apply API schema. Mutiple-apply API schemas can be applied 
-    /// to the same prim multiple times with different instance names. 
-    static const bool IsMultipleApply = false;
+    /// Compile time constant representing what kind of schema this class is.
+    ///
+    /// \sa UsdSchemaType
+    static const UsdSchemaType schemaType = UsdSchemaType::SingleApplyAPI;
 
     /// Construct a UsdSkelBindingAPI on UsdPrim \p prim .
     /// Equivalent to UsdSkelBindingAPI::Get(prim.GetStage(), prim.GetPath())
@@ -145,6 +129,13 @@ public:
     static UsdSkelBindingAPI 
     Apply(const UsdPrim &prim);
 
+protected:
+    /// Returns the type of schema this class belongs to.
+    ///
+    /// \sa UsdSchemaType
+    USDSKEL_API
+    virtual UsdSchemaType _GetSchemaType() const;
+
 private:
     // needs to invoke _GetStaticTfType.
     friend class UsdSchemaRegistry;
@@ -157,23 +148,15 @@ private:
     USDSKEL_API
     virtual const TfType &_GetTfType() const;
 
-    // This override returns true since UsdSkelBindingAPI is an 
-    // applied API schema.
-    USDSKEL_API
-    virtual bool _IsAppliedAPISchema() const override;
-
 public:
     // --------------------------------------------------------------------- //
     // GEOMBINDTRANSFORM 
     // --------------------------------------------------------------------- //
-    /// Encodes the transform that positions gprims in the space in
-    /// which it is bound to a Skeleton.  If the transform is identical for a
-    /// group of gprims that share a common ancestor, the transform may be
-    /// authored on the ancestor, to "inherit" down to all the leaf gprims.
-    /// The *geomBindTransform* is defined as moving a gprim from its own
-    /// object space (untransformed by the gprim's own transform) out into
-    /// Skeleton space. If this transform is unset, an identity transform
-    /// is used instead.
+    /// Encodes the bind-time world space transforms of the prim.
+    /// If the transform is identical for a group of gprims that share a common
+    /// ancestor, the transform may be authored on the ancestor, to "inherit"
+    /// down to all the leaf gprims. If this transform is unset, an identity
+    /// transform is used instead.
     ///
     /// \n  C++ Type: GfMatrix4d
     /// \n  Usd Type: SdfValueTypeNames->Matrix4d
@@ -299,12 +282,8 @@ public:
     // --------------------------------------------------------------------- //
     // ANIMATIONSOURCE 
     // --------------------------------------------------------------------- //
-    /// Animation source to be bound to this prim and its 
-    /// descendants. An animationSource has no effect until the next
-    /// _skel:skeleton_ binding applied either at the same prim that
-    /// the animationSource is defined on, or at the binding of an
-    /// ancestor prim. An animationSource does not affect a skeleton
-    /// bound on an ancestor scope.
+    /// Animation source to be bound to Skeleton primitives at or
+    /// beneath the location at which this property is defined.
     /// 
     ///
     USDSKEL_API
@@ -399,6 +378,33 @@ public:
     /// make a primitive rigidly deformed by a single joint.
     USDSKEL_API
     bool SetRigidJointInfluence(int jointIndex, float weight=1) const;
+
+    /// Convenience method to query the Skeleton bound on this prim.
+    /// Returns true if a Skeleton binding is defined, and sets \p skel to
+    /// the target skel. The resulting Skeleton may still be invalid,
+    /// if the Skeleton has been explicitly *unbound*.
+    ///
+    /// This does not resolved inherited skeleton bindings.
+    USDSKEL_API
+    bool GetSkeleton(UsdSkelSkeleton* skel) const;
+
+    /// Convenience method to query the animation source bound on this prim.
+    /// Returns true if an animation source binding is defined, and sets
+    /// \p prim to the target prim. The resulting primitive may still be
+    /// invalid, if the prim has been explicitly *unbound*.
+    ///
+    /// This does not resolved inherited animation source bindings.
+    USDSKEL_API
+    bool GetAnimationSource(UsdPrim* prim) const;
+
+    /// Returns the skeleton bound at this prim, or one of its ancestors.
+    USDSKEL_API
+    UsdSkelSkeleton GetInheritedSkeleton() const;
+
+    /// Returns the animation source bound at this prim, or one of
+    /// its ancestors.
+    USDSKEL_API
+    UsdPrim GetInheritedAnimationSource() const;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

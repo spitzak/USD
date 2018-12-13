@@ -46,7 +46,7 @@ PXR_NAMESPACE_OPEN_SCOPE
 static HdWrap _GetWrapS(UsdPrim const &usdPrim)
 {
     // XXX: This default value should come from the registry
-    TfToken wrapS("repeat");
+    TfToken wrapS("black");
     UsdShadeShader shader(usdPrim);
     if (shader) {
         UsdAttribute attr = shader.GetInput(UsdHydraTokens->wrapS);
@@ -54,6 +54,7 @@ static HdWrap _GetWrapS(UsdPrim const &usdPrim)
     }
     HdWrap wrapShd = (wrapS == UsdHydraTokens->clamp) ? HdWrapClamp
                    : (wrapS == UsdHydraTokens->repeat) ? HdWrapRepeat
+                   : (wrapS == UsdHydraTokens->mirror) ? HdWrapMirror
                    : HdWrapBlack; 
     return wrapShd;
 }
@@ -61,7 +62,7 @@ static HdWrap _GetWrapS(UsdPrim const &usdPrim)
 static HdWrap _GetWrapT(UsdPrim const &usdPrim)
 {
     // XXX: This default value should come from the registry
-    TfToken wrapT("repeat");
+    TfToken wrapT("black");
     UsdShadeShader shader(usdPrim);
     if (shader) {
         UsdAttribute attr = shader.GetInput(UsdHydraTokens->wrapT);
@@ -69,6 +70,7 @@ static HdWrap _GetWrapT(UsdPrim const &usdPrim)
     }
     HdWrap wrapThd = (wrapT == UsdHydraTokens->clamp) ? HdWrapClamp
                    : (wrapT == UsdHydraTokens->repeat) ? HdWrapRepeat
+                   : (wrapT == UsdHydraTokens->mirror) ? HdWrapMirror
                    : HdWrapBlack; 
     return wrapThd;
 }
@@ -152,17 +154,17 @@ UsdImagingGL_GetTextureResourceID(UsdPrim const& usdPrim,
 
     const bool isPtex = GlfIsSupportedPtexTexture(filePath);
 
-    if (!TfPathExists(filePath)) {
+    if (asset.GetResolvedPath().empty()) {
         if (isPtex) {
             TF_WARN("Unable to find Texture '%s' with path '%s'. Fallback " 
                     "textures are not supported for ptex", 
                     filePath.GetText(), usdPath.GetText());
-            return HdTextureResource::ComputeFallbackPtexHash(); 
+            return HdTextureResource::ID(-1);
         } else {
             TF_WARN("Unable to find Texture '%s' with path '%s'. A black " 
                     "texture will be substituted in its place.", 
                     filePath.GetText(), usdPath.GetText());
-            return HdTextureResource::ComputeFallbackUVHash();
+            return HdTextureResource::ID(-1);
         }
     }
 
@@ -211,6 +213,20 @@ UsdImagingGL_GetTextureResource(UsdPrim const& usdPrim,
         filePath = TfToken(asset.GetAssetPath());
     }
 
+    // XXX : This is transitional code. Currently, only textures read
+    //       via UsdUVTexture have the origin at the lower left.
+    // Extract the id of the node and if it is a UsdUVTexture
+    // then we need to use the new coordinate system with (0,0)
+    // in the bottom left.
+    GlfImage::ImageOriginLocation origin = 
+        GlfImage::ImageOriginLocation::OriginUpperLeft;
+    TfToken id;
+    UsdAttribute attr1 = UsdShadeShader(usdPrim).GetIdAttr();
+    attr1.Get(&id);
+    if (id == UsdImagingTokens->UsdUVTexture) {
+        origin = GlfImage::ImageOriginLocation::OriginLowerLeft;
+    }
+
     const bool isPtex = GlfIsSupportedPtexTexture(filePath);
 
     HdWrap wrapS = _GetWrapS(usdPrim);
@@ -224,7 +240,7 @@ UsdImagingGL_GetTextureResource(UsdPrim const& usdPrim,
             usdPath.GetText(),
             isPtex ? "true" : "false");
  
-    if (!TfPathExists(filePath)) {
+    if (asset.GetResolvedPath().empty()) {
         TF_DEBUG(USDIMAGING_TEXTURES).Msg(
                 "File does not exist, returning nullptr");
         TF_WARN("Unable to find Texture '%s' with path '%s'.", 
@@ -236,12 +252,11 @@ UsdImagingGL_GetTextureResource(UsdPrim const& usdPrim,
     TfStopwatch timer;
     timer.Start();
     GlfTextureHandleRefPtr texture =
-        GlfTextureRegistry::GetInstance().GetTextureHandle(filePath);
-    texture->AddMemoryRequest(memoryLimit);
+        GlfTextureRegistry::GetInstance().GetTextureHandle(filePath, origin);
 
     texResource = HdTextureResourceSharedPtr(
         new HdStSimpleTextureResource(texture, isPtex, wrapS, wrapT,
-                                      minFilter, magFilter));
+                                      minFilter, magFilter, memoryLimit));
     timer.Stop();
 
     TF_DEBUG(USDIMAGING_TEXTURES).Msg("    Load time: %.3f s\n", 

@@ -24,33 +24,32 @@
 #ifndef PXRUSDMAYA_PRIMREADERARGS_H
 #define PXRUSDMAYA_PRIMREADERARGS_H
 
-/// \file primReaderArgs.h
+/// \file usdMaya/primReaderArgs.h
+
+#include "usdMaya/api.h"
+#include "usdMaya/jobArgs.h"
 
 #include "pxr/pxr.h"
-#include "usdMaya/api.h"
+
+#include "pxr/base/gf/interval.h"
+
 #include "pxr/usd/usd/prim.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
 
-/// \class PxrUsdMayaPrimReaderArgs
+/// \class UsdMayaPrimReaderArgs
 /// \brief This class holds read-only arguments that are passed into reader plugins for
 /// the usdMaya library.
 /// 
-/// \sa PxrUsdMayaPrimReaderContext
-class PxrUsdMayaPrimReaderArgs
+/// \sa UsdMayaPrimReaderContext
+class UsdMayaPrimReaderArgs
 {
 public:
     PXRUSDMAYA_API
-    PxrUsdMayaPrimReaderArgs(
+    UsdMayaPrimReaderArgs(
             const UsdPrim& prim,
-            const TfToken& shadingMode,
-            const bool readAnimData,
-            const bool useCustomFrameRange,
-            const double startTime,
-            const double endTime,
-            const TfToken::Set& includeMetadataKeys,
-            const TfToken::Set& includeAPINames);
+            const UsdMayaJobImportArgs& jobArgs);
 
     /// \brief return the usd prim that should be read.
     PXRUSDMAYA_API
@@ -59,20 +58,22 @@ public:
     PXRUSDMAYA_API
     const TfToken& GetShadingMode() const;
 
+    /// Returns the time interval over which to import animated data.
+    /// An empty interval (<tt>GfInterval::IsEmpty()</tt>) means that no
+    /// animated (time-sampled) data should be imported.
     PXRUSDMAYA_API
-    const bool& GetReadAnimData() const;
-
-    PXRUSDMAYA_API
-    bool HasCustomFrameRange() const;
-    PXRUSDMAYA_API
-    double GetStartTime() const;
-    PXRUSDMAYA_API
-    double GetEndTime() const;
+    GfInterval GetTimeInterval() const;
 
     PXRUSDMAYA_API
     const TfToken::Set& GetIncludeMetadataKeys() const;
     PXRUSDMAYA_API
     const TfToken::Set& GetIncludeAPINames() const;
+
+    PXRUSDMAYA_API
+    const TfToken::Set& GetExcludePrimvarNames() const;
+
+    PXRUSDMAYA_API
+    bool GetUseAsAnimationCache() const;
 
     bool ShouldImportUnboundShaders() const {
         // currently this is disabled.
@@ -81,16 +82,10 @@ public:
 
 private:
     const UsdPrim& _prim;
-    const TfToken& _shadingMode;
-    const bool _readAnimData;
-    const bool _useCustomFrameRange;
-    const double _startTime;
-    const double _endTime;
-    const TfToken::Set& _includeMetadataKeys;
-    const TfToken::Set& _includeAPINames;
+    const UsdMayaJobImportArgs& _jobArgs;
 };
 
 
 PXR_NAMESPACE_CLOSE_SCOPE
 
-#endif // PXRUSDMAYA_PRIMREADERARGS_H
+#endif

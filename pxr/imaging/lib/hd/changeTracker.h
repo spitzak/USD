@@ -81,11 +81,12 @@ public:
         DirtyRepr                   = 1 << 18,
         DirtyRenderTag              = 1 << 19,
         DirtyComputationPrimvarDesc = 1 << 20,
-        AllSceneDirtyBits           = ((1<<21) - 1),
+        DirtyCategories             = 1 << 21,
+        AllSceneDirtyBits           = ((1<<22) - 1),
 
-        NewRepr                     = 1 << 21,
+        NewRepr                     = 1 << 22,
 
-        CustomBitsBegin             = 1 << 22,
+        CustomBitsBegin             = 1 << 23,
         CustomBitsEnd               = 1 << 30,
     };
 
@@ -425,6 +426,22 @@ public:
         return _needsGarbageCollection;
     }
 
+    void ClearBprimGarbageCollectionNeeded() {
+        _needsBprimGarbageCollection = false;
+    }
+
+    /// Sets the garbageCollectionNeeded flag.
+    void SetBprimGarbageCollectionNeeded() {
+        _needsBprimGarbageCollection = true;
+    }
+
+    /// Returns true if garbage collection was flagged to be run.
+    /// Currently, this flag only gets set internally when Rprims are removed.
+    bool IsBprimGarbageCollectionNeeded() const {
+        return _needsBprimGarbageCollection;
+    }
+
+
     // ---------------------------------------------------------------------- //
     /// @}
     /// \name RprimCollection Tracking
@@ -529,6 +546,7 @@ private:
     // Collection versions / state.
     _CollectionStateMap _collectionState;
     bool _needsGarbageCollection;
+    bool _needsBprimGarbageCollection;
 
     // Provides reverse-association between instancers and the rprims that use
     // them.

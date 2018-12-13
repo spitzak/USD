@@ -22,7 +22,7 @@
 # KIND, either express or implied. See the Apache License for the specific
 # language governing permissions and limitations under the Apache License.
 
-from pxr import Usd, UsdSkel, Gf, Vt
+from pxr import Usd, UsdGeom, UsdSkel, Gf, Vt
 import unittest, random
 
 
@@ -61,7 +61,7 @@ class TestUsdSkelSkeletonQuery(unittest.TestCase):
 
         skelRoot = UsdSkel.Root.Define(stage, "/SkelRoot")
 
-        anim = UsdSkel.PackedJointAnimation.Define(stage, "/SkelRoot/Anim")
+        anim = UsdSkel.Animation.Define(stage, "/SkelRoot/Anim")
         skel = UsdSkel.Skeleton.Define(stage, "/SkelRoot/Skel")
 
         binding = UsdSkel.BindingAPI.Apply(skelRoot.GetPrim())
@@ -77,6 +77,13 @@ class TestUsdSkelSkeletonQuery(unittest.TestCase):
         # Configure the skel.
         skel.GetJointsAttr().Set(skelOrder)
         restXforms = [_RandomXf() for _ in skelOrder]
+
+        topology = UsdSkel.Topology(skelOrder)
+
+        bindWorldXforms = UsdSkel.ConcatJointTransforms(
+            topology, Vt.Matrix4dArray(restXforms))
+
+        skel.GetBindTransformsAttr().Set(bindWorldXforms)
         skel.GetRestTransformsAttr().Set(restXforms)
 
         # Configure root xforms.
@@ -89,11 +96,6 @@ class TestUsdSkelSkeletonQuery(unittest.TestCase):
         # Leave last element off of anim (tests remapping)
         animOrder = skelOrder[:-1]
         anim.GetJointsAttr().Set(animOrder)
-
-        animRootXforms = [_RandomXf() for _ in xrange(numFrames)]
-        animRootXfAttr = anim.MakeMatrixXform()
-        for frame,xf in enumerate(animRootXforms):
-            animRootXfAttr.Set(xf, frame)
 
         # Apply joint animations.
         animXforms = {i:[_RandomXf() for _ in xrange(len(animOrder))]
@@ -111,7 +113,7 @@ class TestUsdSkelSkeletonQuery(unittest.TestCase):
         skelCache = UsdSkel.Cache()
         skelCache.Populate(skelRoot)
 
-        query = skelCache.GetSkelQuery(skelRoot.GetPrim())
+        query = skelCache.GetSkelQuery(skel)
         self.assertTrue(query)
 
         # Validate joint rest xform computations.
@@ -120,18 +122,22 @@ class TestUsdSkelSkeletonQuery(unittest.TestCase):
         expectedXforms = restXforms
         self.assertArrayIsClose(xforms, expectedXforms)
 
+        xfCache = UsdGeom.XformCache()
+
         # Validate joint xforms computations.
         for t in xrange(numFrames):
 
             xforms = animXforms[t]
 
+            xfCache.SetTime(t)
+
             # Joint local xforms.
-            expectedXforms = list(xforms)+[restXforms[-1]]
-            computedXforms = query.ComputeJointLocalTransforms(t)
-            self.assertArrayIsClose(computedXforms, expectedXforms)
+            expectedLocalXforms = list(xforms)+[restXforms[-1]]
+            computedLocalXforms = query.ComputeJointLocalTransforms(t)
+            self.assertArrayIsClose(computedLocalXforms, expectedLocalXforms)
 
             # Joint skel-space xforms.
-            expectedXforms = Vt.Matrix4dArray(
+            expectedSkelXforms = Vt.Matrix4dArray(
                 [
                     xforms[A],
                     xforms[AB]*xforms[A],
@@ -139,16 +145,27 @@ class TestUsdSkelSkeletonQuery(unittest.TestCase):
                     xforms[D],
                     restXforms[DEF]*xforms[D]
                 ])
-            computedXforms = query.ComputeJointSkelTransforms(t)
-            self.assertArrayIsClose(computedXforms, expectedXforms)
+            computedSkelXforms = query.ComputeJointSkelTransforms(t)
+            self.assertArrayIsClose(computedSkelXforms, expectedSkelXforms)
+
+            # Joint world space xforms.
+            expectedWorldXforms = Vt.Matrix4dArray(
+                [expectedSkelXform*rootXforms[t]
+                 for i,expectedSkelXform in enumerate(expectedSkelXforms)])
+            computedWorldXforms = query.ComputeJointWorldTransforms(xfCache)
+            self.assertArrayIsClose(computedWorldXforms, expectedWorldXforms)
+
+            #
+            # Rest xforms
+            #
 
             # Joint local rest xforms.
-            expectedXforms = restXforms
-            computedXforms = query.ComputeJointLocalTransforms(t,atRest=True)
-            self.assertArrayIsClose(computedXforms, expectedXforms)
+            expectedLocalXforms = restXforms
+            computedLocalXforms = query.ComputeJointLocalTransforms(t,atRest=True)
+            self.assertArrayIsClose(computedLocalXforms, expectedLocalXforms)
 
-            # Joint skel-space xforms.
-            expectedXforms = Vt.Matrix4dArray(
+            # Joint skel-space rest xforms.
+            expectedSkelXforms = Vt.Matrix4dArray(
                 [
                     restXforms[A],
                     restXforms[AB]*restXforms[A],
@@ -156,14 +173,16 @@ class TestUsdSkelSkeletonQuery(unittest.TestCase):
                     restXforms[D],
                     restXforms[DEF]*restXforms[D]
                 ])
-            computedXforms = query.ComputeJointSkelTransforms(0, atRest=True)
-            self.assertArrayIsClose(computedXforms, expectedXforms)
+            computedSkelXforms = query.ComputeJointSkelTransforms(0, atRest=True)
+            self.assertArrayIsClose(computedSkelXforms, expectedSkelXforms)
 
+            # Joint world space rest xforms.
+            expectedWorldXforms = Vt.Matrix4dArray(
+                [expectedSkelXform*rootXforms[t]
+                 for i,expectedSkelXform in enumerate(expectedSkelXforms)])
+            computedWorldXforms = query.ComputeJointWorldTransforms(xfCache, atRest=True)
+            self.assertArrayIsClose(computedWorldXforms, expectedWorldXforms)
 
-        # Validate anim root transforms.
-        for frame,expectedXf in enumerate(animRootXforms):
-            animXf = query.ComputeAnimTransform(frame)
-            self.assertTrue(Gf.IsClose(animXf, expectedXf, 1e-5))
 
         # Validate skel instance transforms.
         for frame,expectedXf in enumerate(rootXforms):
@@ -179,7 +198,7 @@ class TestUsdSkelSkeletonQuery(unittest.TestCase):
         skelCache.Clear()
         skelCache.Populate(skelRoot)
 
-        query = skelCache.GetSkelQuery(skelRoot.GetPrim())
+        query = skelCache.GetSkelQuery(skel)
 
         expectedXforms = restXforms
         computedXforms = query.ComputeJointLocalTransforms(10)
@@ -197,7 +216,7 @@ class TestUsdSkelSkeletonQuery(unittest.TestCase):
         skelCache.Clear()
         skelCache.Populate(skelRoot)
 
-        query = skelCache.GetSkelQuery(skelRoot.GetPrim())
+        query = skelCache.GetSkelQuery(skel)
 
         expectedXforms = restXforms
         computedXforms = query.ComputeJointLocalTransforms(5)

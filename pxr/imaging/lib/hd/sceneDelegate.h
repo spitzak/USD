@@ -39,6 +39,7 @@
 #include "pxr/imaging/pxOsd/subdivTags.h"
 
 #include "pxr/base/vt/array.h"
+#include "pxr/base/vt/dictionary.h"
 #include "pxr/base/vt/value.h"
 #include "pxr/usd/sdf/path.h"
 
@@ -240,6 +241,15 @@ struct HdExtComputationOutputDescriptor {
 typedef std::vector<HdExtComputationOutputDescriptor>
         HdExtComputationOutputDescriptorVector;
 
+/// \struct HdRenderBufferDescriptor
+///
+/// Describes the allocation structure of a render buffer bprim.
+struct HdRenderBufferDescriptor {
+    GfVec3i dimensions;
+    HdFormat format;
+    bool multiSampled;
+};
+
 /// \class HdSceneDelegate
 ///
 /// Adapter class providing data exchange with the client scene graph.
@@ -347,6 +357,10 @@ public:
     /// render pass bucketing.
     HD_API
     virtual TfToken GetRenderTag(SdfPath const& id, TfToken const& reprName);
+
+    /// Returns the prim categories.
+    HD_API
+    virtual VtArray<TfToken> GetCategories(SdfPath const& id);
 
     // -----------------------------------------------------------------------//
     /// \name Motion samples
@@ -500,6 +514,10 @@ public:
     HD_API 
     virtual TfTokenVector GetMaterialPrimvars(SdfPath const &materialId);
 
+    // Returns the metadata dictionary for the given material ID. 
+    HD_API
+    virtual VtDictionary GetMaterialMetadata(SdfPath const &materialId);
+
     // -----------------------------------------------------------------------//
     /// \name Texture Aspects
     // -----------------------------------------------------------------------//
@@ -511,6 +529,14 @@ public:
     /// Returns the texture resource for a given texture ID.
     HD_API
     virtual HdTextureResourceSharedPtr GetTextureResource(SdfPath const& textureId);
+
+    // -----------------------------------------------------------------------//
+    /// \name Renderbuffer Aspects
+    // -----------------------------------------------------------------------//
+
+    /// Returns the allocation descriptor for a given render buffer prim.
+    HD_API
+    virtual HdRenderBufferDescriptor GetRenderBufferDescriptor(SdfPath const& id);
 
     // -----------------------------------------------------------------------//
     /// \name Light Aspects

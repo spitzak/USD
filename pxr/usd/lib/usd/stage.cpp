@@ -95,6 +95,7 @@
 #include <boost/utility/in_place_factory.hpp>
 
 #include <tbb/spin_rw_mutex.h>
+#include <tbb/spin_mutex.h>
 
 #include <algorithm>
 #include <functional>
@@ -525,13 +526,6 @@ struct _NameChildrenPred
     bool operator()(const PcpPrimIndex &index, 
                     TfTokenVector* childNamesToCompose) const 
     {
-        // Compose only the child prims that are included in the population
-        // mask, if any.
-        if (_mask && !_mask->GetIncludedChildNames(
-                index.GetPath(), childNamesToCompose)) {
-            return false;
-        }
-
         // Use a resolver to walk the index and find the strongest active
         // opinion.
         Usd_Resolver res(&index);
@@ -546,15 +540,41 @@ struct _NameChildrenPred
             }
         }
 
-        // UsdStage doesn't expose any prims beneath instances, so we don't
-        // need to compute indexes for children of instances unless the
-        // index will be used as a source for a master prim.
+        // UsdStage doesn't expose any prims beneath instances, so we don't need
+        // to compute indexes for children of instances unless the index will be
+        // used as a source for a master prim.
         if (index.IsInstanceable()) {
             const bool indexUsedAsMasterSource = 
-                _instanceCache->RegisterInstancePrimIndex(index)
-                || !_instanceCache->GetMasterUsingPrimIndexPath(
-                    index.GetPath()).IsEmpty();
+                _instanceCache->RegisterInstancePrimIndex(index);
+            if (_mask && indexUsedAsMasterSource) {
+                // Add this to the _masterSrcIndexes mask.  We use this to know
+                // which master src indexes need to be populated fully, due to
+                // instancing.
+                tbb::spin_mutex::scoped_lock lock(_masterSrcIndexesMutex);
+                _masterSrcIndexes.Add(index.GetPath());
+            }
             return indexUsedAsMasterSource;
+        }
+
+        // Compose only the child prims that are included in the population
+        // mask, if any, unless we're composing an index that a master uses, in
+        // which case we do the whole thing.
+        if (_mask) {
+            SdfPath const &indexPath = index.GetPath();
+            bool masterUses = false;
+            {
+                // Check to see if this path is included by one of the master
+                // src indexes we registered for use by a master.  If so, we do
+                // the entire subtree.  Maybe someday in the future we'll do
+                // something fancier for masks beneath instances.
+                masterUses = _instanceCache->MasterUsesPrimIndexPath(indexPath);
+                if (!masterUses) {
+                    tbb::spin_mutex::scoped_lock lock(_masterSrcIndexesMutex);
+                    masterUses = _masterSrcIndexes.IncludesSubtree(indexPath);
+                }
+            }
+            return masterUses ||
+                _mask->GetIncludedChildNames(indexPath, childNamesToCompose);
         }
 
         return true;
@@ -563,6 +583,8 @@ struct _NameChildrenPred
 private:
     const UsdStagePopulationMask* _mask;
     Usd_InstanceCache* _instanceCache;
+    mutable UsdStagePopulationMask _masterSrcIndexes;
+    mutable tbb::spin_mutex _masterSrcIndexesMutex;
 };
 
 } // anon
@@ -610,7 +632,7 @@ UsdStage::_InstantiateStage(const SdfLayerRefPtr &rootLayer,
         SdfPathVector(1, SdfPath::AbsoluteRootPath()),
         load == LoadAll ?
         _IncludeAllDiscoveredPayloads : _IncludeNoDiscoveredPayloads,
-        "Instantiating stage");
+        "instantiating stage");
     stage->_pseudoRoot = stage->_InstantiatePrim(SdfPath::AbsoluteRootPath());
     stage->_ComposeSubtreeInParallel(stage->_pseudoRoot);
     stage->_RegisterPerLayerNotices();
@@ -1746,6 +1768,32 @@ UsdStage::GetPrimAtPath(const SdfPath &path) const
     return UsdPrim(primData, proxyPrimPath);
 }
 
+UsdObject
+UsdStage::GetObjectAtPath(const SdfPath &path) const
+{
+    // Maintain consistent behavior with GetPrimAtPath
+    if (!path.IsAbsolutePath()) {
+        return UsdObject();
+    }
+
+    const bool isPrimPath = path.IsPrimPath();
+    const bool isPropPath = !isPrimPath && path.IsPropertyPath();
+    if (!isPrimPath && !isPropPath) {
+        return UsdObject();
+    }
+
+    // A valid prim must be found to return either a prim or prop
+    if (isPrimPath) {
+        return GetPrimAtPath(path);
+    } else if (isPropPath) {
+        if (auto prim = GetPrimAtPath(path.GetPrimPath())) {
+            return prim.GetProperty(path.GetNameToken());
+        }
+    }
+
+    return UsdObject();
+}
+
 Usd_PrimDataConstPtr
 UsdStage::_GetPrimDataAtPath(const SdfPath &path) const
 {
@@ -2689,22 +2737,49 @@ UsdStage::_ReportPcpErrors(const PcpErrorVector &errors,
     _ReportErrors(errors, std::vector<std::string>(), context);
 }
 
+// Report any errors.  It's important for error filtering that each
+// error be a single line. It's equally important that we provide
+// some clue to associating the errors to the originating stage
+// (it is caller's responsibility to ensure that any further required
+// context (e.g. prim path) be present in 'context' already).  We choose
+// a balance between total specificity (which would require identifying
+// both the session layer and ArResolverContext and be very long) 
+// and brevity.  We can modulate this behavior with TfDebug if needed.
+// Finally, we use a mutex to ensure there is no interleaving of errors
+// from multiple threads.
 void
 UsdStage::_ReportErrors(const PcpErrorVector &errors,
                         const std::vector<std::string> &otherErrors,
                         const std::string &context) const
 {
-    // Report any errors.
+    static std::mutex   errMutex;
+   
     if (!errors.empty() || !otherErrors.empty()) {
-        std::string message = context + ":\n";
+        std::string  fullContext = TfStringPrintf("(%s on stage @%s@ <%p>)", 
+                                      context.c_str(), 
+                                      GetRootLayer()->GetIdentifier().c_str(),
+                                      this);
+        std::vector<std::string>  allErrors;
+        allErrors.reserve(errors.size() + otherErrors.size());
+
         for (const auto& err : errors) {
-            message += "    " + TfStringReplace(err->ToString(), "\n", "\n    ") 
-                       + '\n';
+            allErrors.push_back(TfStringPrintf("%s %s", 
+                                               err->ToString().c_str(), 
+                                               fullContext.c_str()));
         }
         for (const auto& err : otherErrors) {
-            message += "    " + TfStringReplace(err, "\n", "\n    ") + '\n';
+            allErrors.push_back(TfStringPrintf("%s %s", 
+                                               err.c_str(), 
+                                               fullContext.c_str()));
         }
-        TF_WARN(message);
+
+        {
+            std::lock_guard<std::mutex>  lock(errMutex);
+
+            for (const auto &err : allErrors){
+                TF_WARN(err);
+            }
+        }
     }
 }
 
@@ -2786,7 +2861,7 @@ UsdStage::_ComposeSubtreeImpl(
     // Report any errors.
     if (!errors.empty()) {
         _ReportPcpErrors(
-            errors, TfStringPrintf("Computing prim index <%s>",
+            errors, TfStringPrintf("computing prim index <%s>",
                                    primIndexPath.GetText()));
     }
 
@@ -3913,7 +3988,7 @@ UsdStage::_RecomposePrims(const PcpChanges &changes,
     Usd_InstanceChanges instanceChanges;
     _ComposePrimIndexesInParallel(
         primPathsToRecompose, _IncludeNewPayloadsIfAncestorWasIncluded,
-        "Recomposing stage", &instanceChanges);
+        "recomposing stage", &instanceChanges);
     
     // Determine what instance master prims on this stage need to
     // be recomposed due to instance prim index changes.
@@ -4341,22 +4416,22 @@ UsdStage::_GetPrimSpec(const SdfPath& path)
 }
 
 SdfSpecType
-UsdStage::_GetDefiningSpecType(const UsdPrim& prim,
+UsdStage::_GetDefiningSpecType(Usd_PrimDataConstPtr primData,
                                const TfToken& propName) const
 {
-    if (!TF_VERIFY(prim) || !TF_VERIFY(!propName.IsEmpty()))
+    if (!TF_VERIFY(primData) || !TF_VERIFY(!propName.IsEmpty()))
         return SdfSpecTypeUnknown;
 
     // Check for a spec type in the definition registry, in case this is a
     // builtin property.
     SdfSpecType specType =
-        UsdSchemaRegistry::GetSpecType(prim.GetTypeName(), propName);
+        UsdSchemaRegistry::GetSpecType(primData->GetTypeName(), propName);
 
     if (specType != SdfSpecTypeUnknown)
         return specType;
 
     // Otherwise look for the strongest authored property spec.
-    Usd_Resolver res(&prim.GetPrimIndex(), /*skipEmptyNodes=*/true);
+    Usd_Resolver res(&primData->GetPrimIndex(), /*skipEmptyNodes=*/true);
     SdfPath curPath;
     bool curPathValid = false;
     while (res.IsValid()) {
@@ -5749,7 +5824,7 @@ UsdStage::_GetGeneralMetadataImpl(const UsdObject &obj,
                                   bool useFallbacks,
                                   Composer *composer) const
 {
-    Usd_Resolver resolver(&obj.GetPrim().GetPrimIndex());
+    Usd_Resolver resolver(&obj._Prim()->GetPrimIndex());
     if (!_ComposeGeneralMetadataImpl(
             obj, fieldName, keyPath, useFallbacks, &resolver, composer)) {
         return false;
@@ -6459,7 +6534,7 @@ UsdStage::_GetResolvedValueImpl(const UsdProperty &prop,
                                 Resolver *resolver,
                                 const UsdTimeCode *time) const
 {
-    const UsdPrim prim = prop.GetPrim();
+    auto primHandle = prop._Prim();
     boost::optional<double> localTime;
     if (time && !time->IsDefault()) {
         localTime = time->GetValue();
@@ -6469,9 +6544,10 @@ UsdStage::_GetResolvedValueImpl(const UsdProperty &prop,
     // attribute at the given time. Clips never contribute default
     // values.
     const std::vector<Usd_ClipCache::Clips>* clipsAffectingPrim = nullptr;
-    if (prim._Prim()->MayHaveOpinionsInClips()
+    if (primHandle->MayHaveOpinionsInClips()
         && (!time || !time->IsDefault())) {
-        clipsAffectingPrim = &(_clipCache->GetClipsForPrim(prim.GetPath()));
+        clipsAffectingPrim =
+            &(_clipCache->GetClipsForPrim(primHandle->GetPath()));
     }
 
     // Clips may contribute opinions at nodes where no specs for the attribute
@@ -6479,7 +6555,7 @@ UsdStage::_GetResolvedValueImpl(const UsdProperty &prop,
     // Usd_Resolver that we want to iterate over 'empty' nodes as well.
     const bool skipEmptyNodes = (bool)(!clipsAffectingPrim);
 
-    for (Usd_Resolver res(&prim.GetPrimIndex(), skipEmptyNodes); 
+    for (Usd_Resolver res(&primHandle->GetPrimIndex(), skipEmptyNodes); 
          res.IsValid(); res.NextNode()) {
 
         const PcpNodeRef& node = res.GetNode();

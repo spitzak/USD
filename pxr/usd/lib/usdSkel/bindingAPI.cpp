@@ -60,11 +60,10 @@ UsdSkelBindingAPI::Get(const UsdStagePtr &stage, const SdfPath &path)
     return UsdSkelBindingAPI(stage->GetPrimAtPath(path));
 }
 
-/*virtual*/
-bool 
-UsdSkelBindingAPI::_IsAppliedAPISchema() const 
-{
-    return true;
+
+/* virtual */
+UsdSchemaType UsdSkelBindingAPI::_GetSchemaType() const {
+    return UsdSkelBindingAPI::schemaType;
 }
 
 /* static */
@@ -268,9 +267,11 @@ PXR_NAMESPACE_CLOSE_SCOPE
 // --(BEGIN CUSTOM CODE)--
 
 
+#include "pxr/usd/usdGeom/boundable.h"
 #include "pxr/usd/usdGeom/imageable.h"
 #include "pxr/usd/usdGeom/tokens.h"
 
+#include "pxr/usd/usdSkel/skeleton.h"
 #include "pxr/usd/usdSkel/utils.h"
 
 
@@ -332,6 +333,127 @@ UsdSkelBindingAPI::SetRigidJointInfluence(int jointIndex, float weight) const
     
     return jointIndicesPv.Set(indices) && jointWeightsPv.Set(weights);
 }
+
+
+namespace {
+
+
+/// Return the a resolved prim for a target in \p targets.
+UsdPrim
+_GetFirstTargetPrimForRel(const UsdRelationship& rel,
+                          const SdfPathVector& targets)
+{
+    if (targets.size() > 0) {
+        if (targets.size() > 1) {
+            TF_WARN("%s -- relationship has more than one target. "
+                    "Only the first will be used.",
+                    rel.GetPath().GetText());
+        }
+        if (UsdPrim prim = rel.GetStage()->GetPrimAtPath(targets.front()))
+            return prim;
+
+        TF_WARN("%s -- Invalid target <%s>.",
+                rel.GetPath().GetText(), targets.front().GetText());
+    }
+    return UsdPrim();
+}
+
+
+} // namespace
+
+
+bool
+UsdSkelBindingAPI::GetSkeleton(UsdSkelSkeleton* skel) const
+{
+    if (!skel) {
+        TF_CODING_ERROR("'skel' pointer is null.");
+        return false;
+    }
+    
+    if (UsdRelationship rel = GetSkeletonRel()) {
+
+        SdfPathVector targets;
+        if (rel.GetForwardedTargets(&targets)) {
+
+            UsdPrim prim = _GetFirstTargetPrimForRel(rel, targets);
+            *skel = UsdSkelSkeleton(prim);
+
+            if (prim && !*skel) {
+                TF_WARN("%s -- target (<%s>) of relationship is not "
+                        "a Skeleton.", rel.GetPath().GetText(),
+                        prim.GetPath().GetText());
+            }
+            return true;
+        }
+    }
+    *skel = UsdSkelSkeleton();
+    return false;
+}
+
+
+UsdSkelSkeleton
+UsdSkelBindingAPI::GetInheritedSkeleton() const
+{
+    UsdSkelSkeleton skel;
+
+    UsdPrim p = GetPrim();
+    if (p) {
+        for( ; !p.IsPseudoRoot(); p = p.GetParent()) {
+            if (UsdSkelBindingAPI(p).GetSkeleton(&skel)) {
+                return skel;
+            }
+        }
+    }
+    return skel;
+}
+
+
+bool
+UsdSkelBindingAPI::GetAnimationSource(UsdPrim* prim) const
+{
+    if (!prim) {
+        TF_CODING_ERROR("'prim' pointer is null.");
+        return false;
+    }
+
+    if (UsdRelationship rel = GetAnimationSourceRel()) {
+        
+        SdfPathVector targets;
+        if (rel.GetForwardedTargets(&targets)) {
+
+            *prim = _GetFirstTargetPrimForRel(rel, targets);
+            
+            if (*prim && !UsdSkelIsSkelAnimationPrim(*prim)) {
+                TF_WARN("%s -- target (<%s>) of relationship is not a valid "
+                        "skel animation source.",
+                        rel.GetPath().GetText(),
+                        prim->GetPath().GetText());
+                *prim = UsdPrim();
+            }
+            return true;
+        }
+    }
+    *prim = UsdPrim();
+    return false;
+}
+
+
+UsdPrim
+UsdSkelBindingAPI::GetInheritedAnimationSource() const
+{
+    UsdPrim animPrim;
+
+    UsdPrim p = GetPrim();
+    if (p) {
+        for( ; !p.IsPseudoRoot(); p = p.GetParent()) {
+            if (UsdSkelBindingAPI(p).GetAnimationSource(&animPrim)) {
+                return animPrim;
+            }
+        }
+    }
+    return animPrim;
+}
+
 
 
 PXR_NAMESPACE_CLOSE_SCOPE

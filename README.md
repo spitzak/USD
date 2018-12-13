@@ -47,11 +47,11 @@ Dependencies
 
 | Name | Version | Optional |
 | ---- | ------- | :------: |
-| C++ compiler                                                      | GCC 4.8, Clang 3.5, MSVC 14.0(VS 2015) |   |
-| C compiler                                                        | GCC 4.8, Clang 3.5, MSVC 14.0(VS 2015) |   |
-| [CMake](https://cmake.org/documentation/)                         | 2.8.8 (Linux/OS X), 3.1.1 (Windows)    |   |
+| C++ compiler                                                      | GCC 4.8, Clang 3.5, MSVC 14.0(VS 2015), MSVC 14.1(VS 2017) |   |
+| C compiler                                                        | GCC 4.8, Clang 3.5, MSVC 14.0(VS 2015), MSVC 14.1(VS 2017) |   |
+| [CMake](https://cmake.org/documentation/)                         | 2.8.8 (Linux/OS X), 3.1.1 (Windows VS 2015), 3.12 (Windows VS 2017)    |   |
 | [Python](https://python.org)                                      | 2.7.5                                  | x |
-| [Boost](https://boost.org)                                        | 1.55 (Linux), 1.61.0 (OS X/Windows)    |   |
+| [Boost](https://boost.org)                                        | 1.55 (Linux), 1.61.0 (OS X/Windows VS 2015), 1.65.1 (Windows VS 2017)    |   |
 | [Intel TBB](https://www.threadingbuildingblocks.org/)             | 4.4 Update 6                           |   |
 
 Additional dependencies are required for the following components. These components
@@ -62,9 +62,10 @@ may be disabled at build-time, for further details see [Advanced Build Configura
 | Name | Version | Optional |
 | ---- | ------- | :------: |
 | [OpenSubdiv](https://github.com/PixarAnimationStudios/OpenSubdiv) | 3.0.5 (Linux/OS X), 3.2.0 (Windows)         |   |
-| [GLEW](http://glew.sourceforge.net/)                              | 1.10.0                                      |   |
+| [GLEW](http://glew.sourceforge.net/)                              | 1.10.0                                      | x |
 | [OpenEXR](http://www.openexr.com)                                 | 2.2.0                                       |   |
-| [OpenImageIO](https://sites.google.com/site/openimageio/home)     | 1.5.11                                      |   |
+| [OpenImageIO](https://sites.google.com/site/openimageio/home)     | 1.5.11                                      | x |
+| [OSL (OpenShadingLanguage)](https://github.com/imageworks/OpenShadingLanguage)     | 1.5.12                                      | x |
 | [Ptex](http://ptex.us/)                                           | 2.0.30                                      | x |
 
 **usdview**
@@ -139,7 +140,9 @@ then build and install USD into ```/opt/local/USD```.
 
 Launch the "Developer Command Prompt" for your version of Visual Studio and 
 run the script in the opened shell. Make sure to use the 64-bit (x64) command
-prompt and not the 32-bit (x86) command prompt.
+prompt and not the 32-bit (x86) command prompt.  (Note if you're trying to
+build with Visual Studio 2017, use the "x86 Native Tools Command Prompt for VS
+2017").
 
 See https://docs.microsoft.com/en-us/dotnet/framework/tools/developer-command-prompt-for-vs for more details.
 

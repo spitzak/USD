@@ -28,14 +28,15 @@
 
 #include "pxr/pxr.h"
 #include "pxr/usdImaging/usdImaging/api.h"
+#include "pxr/usdImaging/usdImaging/collectionCache.h"
 #include "pxr/usdImaging/usdImaging/valueCache.h"
 #include "pxr/usdImaging/usdImaging/inheritedCache.h"
 #include "pxr/usdImaging/usdImaging/instancerContext.h"
 
 #include "pxr/imaging/hd/sceneDelegate.h"
+#include "pxr/imaging/hd/selection.h"
 #include "pxr/imaging/hd/texture.h"
 #include "pxr/imaging/hd/version.h"
-#include "pxr/imaging/hdx/selectionTracker.h"
 
 #include "pxr/imaging/pxOsd/subdivTags.h"
 #include "pxr/usd/sdf/path.h"
@@ -156,6 +157,10 @@ public:
     /// This has no effect in the case of the default USD timecode.
     UsdTimeCode GetTimeWithOffset(float offset) const;
 
+    /// Applies any scene edits which have been queued up by notices from USD.
+    USDIMAGING_API
+    void ApplyPendingUpdates();
+
     /// Returns the refinement level that is used when prims have no explicit
     /// level set.
     ///
@@ -253,6 +258,10 @@ public:
     void SetUsdDrawModesEnabled(bool enableUsdDrawModes);
     bool GetUsdDrawModesEnabled() const { return _enableUsdDrawModes; }
 
+    /// Enables custom shading on prims.
+    USDIMAGING_API
+    void SetHardwareShadingEnabled(bool enable);
+
     // ---------------------------------------------------------------------- //
     // See HdSceneDelegate for documentation of the following virtual methods.
     // ---------------------------------------------------------------------- //
@@ -290,6 +299,8 @@ public:
     virtual VtValue Get(SdfPath const& id, TfToken const& key) override;
     USDIMAGING_API
     virtual TfToken GetReprName(SdfPath const &id) override;
+    USDIMAGING_API
+    virtual VtArray<TfToken> GetCategories(SdfPath const &id) override;
     USDIMAGING_API
     virtual HdPrimvarDescriptorVector
     GetPrimvarDescriptors(SdfPath const& id,
@@ -419,10 +430,10 @@ public:
     /// XXX: subtree highlighting with native instancing is not working
     /// correctly right now. Path needs to be a leaf prim or instancer.
     USDIMAGING_API
-    bool PopulateSelection(HdxSelectionHighlightMode const& highlightMode,
+    bool PopulateSelection(HdSelection::HighlightMode const& highlightMode,
                            const SdfPath &path,
                            int instanceIndex,
-                           HdxSelectionSharedPtr const &result);
+                           HdSelectionSharedPtr const &result);
 
     /// Returns true if \p usdPath is included in invised path list.
     USDIMAGING_API
@@ -480,10 +491,6 @@ private:
     void _ResyncPrim(SdfPath const& rootPath, UsdImagingIndexProxy* proxy,
                      bool repopulateFromRoot = false);
 
-    // Process all pending updates, ensuring that rprims are marked dirty
-    // as needed.
-    void _ProcessPendingUpdates();
-
     // ---------------------------------------------------------------------- //
     // Usd Data-Access Helper Methods
     // ---------------------------------------------------------------------- //
@@ -530,13 +537,6 @@ private:
     // ---------------------------------------------------------------------- //
     // Helper methods for updating the delegate on time changes
     // ---------------------------------------------------------------------- //
-
-    // Set the delegate's current time to the given time and process
-    // any object changes that have occurred in the interim.
-    bool _ProcessChangesForTimeUpdate(UsdTimeCode time);
-
-    // Set dirty bits based off those previous been designated as time varying.
-    void _ApplyTimeVaryingState();
 
     // Execute all time update tasks that have been added to the given worker.
     static void _ExecuteWorkForTimeUpdate(_Worker* worker);
@@ -632,6 +632,7 @@ private:
     UsdImaging_MaterialBindingCache _materialBindingCache;
     UsdImaging_VisCache _visCache;
     UsdImaging_DrawModeCache _drawModeCache;
+    UsdImaging_CollectionCache _collectionCache;
 
     // Pickability
     PickabilityMap _pickablesMap;
@@ -641,6 +642,9 @@ private:
     bool _enableUsdDrawModes;
 
     const bool _hasDrawModeAdapter;
+
+    /// Enable custom shading of prims
+    bool _hardwareShadingEnabled;
 
     UsdImagingDelegate() = delete;
     UsdImagingDelegate(UsdImagingDelegate const &) = delete;

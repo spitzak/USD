@@ -39,6 +39,7 @@ pxr_library(hd
         drawingCoord
         drawItem
         engine
+        enums
         extCompCpuComputation
         extCompInputSource
         extCompPrimvarBufferSource
@@ -58,6 +59,7 @@ pxr_library(hd
         points
         primGather
         primTypeIndex
+        renderBuffer
         renderDelegate
         renderIndex
         renderPass
@@ -71,6 +73,7 @@ pxr_library(hd
         rprimSharedData
         sceneDelegate
         sceneExtCompInputSource
+        selection
         smoothNormals
         sortedIds                   
         sprim
@@ -91,7 +94,6 @@ pxr_library(hd
 
     PUBLIC_HEADERS
         api.h
-        enums.h
         version.h
 
     PRIVATE_CLASSES

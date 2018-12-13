@@ -14,6 +14,7 @@ pxr_library(trace
         ${TBB_INCLUDE_DIRS}
 
     PUBLIC_CLASSES
+        aggregateTree
         aggregateNode
         category
         collection
@@ -39,6 +40,7 @@ pxr_library(trace
         threads
 
     PRIVATE_CLASSES
+        aggregateTreeBuilder
         eventTreeBuilder
         jsonSerialization
 
@@ -117,6 +119,13 @@ pxr_build_test(testTraceCounters
         trace
     CPPFILES
         testenv/testTraceCounters.cpp
+)
+
+pxr_build_test(testTraceReportPerf
+    LIBRARIES
+        trace
+    CPPFILES
+        testenv/testTraceReportPerf.cpp
 )
 
 pxr_test_scripts(
@@ -244,4 +253,8 @@ pxr_register_test(testTraceSerialization
 
 pxr_register_test(testTraceCounters
     COMMAND "${CMAKE_INSTALL_PREFIX}/tests/testTraceCounters"
+)
+
+pxr_register_test(testTraceReportPerf
+    COMMAND "${CMAKE_INSTALL_PREFIX}/tests/testTraceReportPerf"
 )
